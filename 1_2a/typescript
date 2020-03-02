@@ -1,0 +1,621 @@
+Script started on 2020-02-27 12:54:02+0600
+
+alexandr.kazakov@node03-ml: /data/hdd/akazakov/sandbox/linux_adm/1_2a$ vagrant ssh
+vagrant@otuslinux:~[vagrant@otuslinux ~]$ sudo -i
+root@otuslinux:~[root@otuslinux ~]# lsblk -f
+NAME   FSTYPE LABEL UUID                                 MOUNTPOINT
+sda                                                      
+└─sda1 xfs          8ac075e3-1124-4bb6-bef7-a6811bf8b870 /
+sdb                                                      
+
+[root@otuslinux ~]# lsblk 
+NAME   MAJ:MIN RM SIZE RO TYPE MOUNTPOINT
+sda      8:0    0  40G  0 disk 
+└─sda1   8:1    0  40G  0 part /
+sdb      8:16   0  40G  0 disk 
+
+[root@otuslinux ~]# sfdisk -d /dev/sda | sfdisk /dev/sdb
+Checking that no-one is using this disk right now ...
+OK
+
+Disk /dev/sdb: 5221 cylinders, 255 heads, 63 sectors/track
+sfdisk:  /dev/sdb: unrecognized partition table type
+
+Old situation:
+sfdisk: No partitions found
+
+New situation:
+Units: sectors of 512 bytes, counting from 0
+
+   Device Boot    Start       End   #sectors  Id  System
+/dev/sdb1   *      2048  83886079   83884032  83  Linux
+/dev/sdb2             0         -          0   0  Empty
+/dev/sdb3             0         -          0   0  Empty
+/dev/sdb4             0         -          0   0  Empty
+Warning: partition 1 does not end at a cylinder boundary
+Successfully wrote the new partition table
+
+Re-reading the partition table ...
+
+If you created or changed a DOS partition, /dev/foo7, say, then use dd(1)
+to zero the first 512 bytes:  dd if=/dev/zero of=/dev/foo7 bs=512 count=1
+(See fdisk(8).)
+[root@otuslinux ~]# fdisk -l
+
+Disk /dev/sda: 42.9 GB, 42949672960 bytes, 83886080 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk label type: dos
+Disk identifier: 0x0009ef88
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sda1   *        2048    83886079    41942016   83  Linux
+
+Disk /dev/sdb: 42.9 GB, 42949672960 bytes, 83886080 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk label type: dos
+Disk identifier: 0x00000000
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sdb1   *        2048    83886079    41942016   83  Linux
+[root@otuslinux ~]# fdisk /dev/sdb
+Welcome to fdisk (util-linux 2.23.2).
+
+Changes will remain in memory only, until you decide to write them.
+Be careful before using the write command.
+
+
+Command (m for help): t
+Selected partition 1
+Hex code (type L to list all codes): fd
+Changed type of partition 'Linux' to 'Linux raid autodetect'
+
+Command (m for help): w
+The partition table has been altered!
+
+Calling ioctl() to re-read partition table.
+Syncing disks.
+[root@otuslinux ~]# fdisk -l
+
+Disk /dev/sda: 42.9 GB, 42949672960 bytes, 83886080 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk label type: dos
+Disk identifier: 0x0009ef88
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sda1   *        2048    83886079    41942016   83  Linux
+
+Disk /dev/sdb: 42.9 GB, 42949672960 bytes, 83886080 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk label type: dos
+Disk identifier: 0x00000000
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sdb1   *        2048    83886079    41942016   fd  Linux raid autodetect
+
+[root@otuslinux ~]# mdadm --create /dev/md1 --level=1 --raid-devices=2 missing /dev/sdb1
+mdadm: Note: this array has metadata at the start and
+    may not be suitable as a boot device.  If you plan to
+    store '/boot' on this device please ensure that
+    your boot-loader understands md/v1.x metadata, or use
+    --metadata=0.90
+Continue creating array? y
+mdadm: Defaulting to version 1.2 metadata
+mdadm: array /dev/md1 started.
+[root@otuslinux ~]# cat /proc/mdstat 
+Personalities : [raid1] 
+md1 : active raid1 sdb1[1]
+      41908224 blocks super 1.2 [2/1] [_U]
+      
+unused devices: <none>
+[root@otuslinux ~]# lsblk 
+NAME    MAJ:MIN RM SIZE RO TYPE  MOUNTPOINT
+sda       8:0    0  40G  0 disk  
+└─sda1    8:1    0  40G  0 part  /
+sdb       8:16   0  40G  0 disk  
+└─sdb1    8:17   0  40G  0 part  
+  └─md1   9:1    0  40G  0 raid1 
+
+[root@otuslinux ~]# blkid 
+/dev/sda1: UUID="8ac075e3-1124-4bb6-bef7-a6811bf8b870" TYPE="xfs" 
+/dev/sdb1: UUID="0b1614db-1088-9778-ddf4-945548183dde" UUID_SUB="dbd80ea4-53ec-dff3-b71e-e9ac510a7937" LABEL="otuslinux:1" TYPE="linux_raid_member" 
+[root@otuslinux ~]# df -T
+Filesystem     Type     1K-blocks    Used Available Use% Mounted on
+/dev/sda1      xfs       41921540 2999156  38922384   8% /
+devtmpfs       devtmpfs    499468       0    499468   0% /dev
+tmpfs          tmpfs       507484       0    507484   0% /dev/shm
+tmpfs          tmpfs       507484    6876    500608   2% /run
+tmpfs          tmpfs       507484       0    507484   0% /sys/fs/cgroup
+tmpfs          tmpfs       101500       0    101500   0% /run/user/1000
+tmpfs          tmpfs       101500       0    101500   0% /run/user/0
+
+[root@otuslinux ~]# mkfs.xfs /dev/md1
+meta-data=/dev/md1               isize=512    agcount=4, agsize=2619264 blks
+         =                       sectsz=512   attr=2, projid32bit=1
+         =                       crc=1        finobt=0, sparse=0
+data     =                       bsize=4096   blocks=10477056, imaxpct=25
+         =                       sunit=0      swidth=0 blks
+naming   =version 2              bsize=4096   ascii-ci=0 ftype=1
+log      =internal log           bsize=4096   blocks=5115, version=2
+         =                       sectsz=512   sunit=0 blks, lazy-count=1
+realtime =none                   extsz=4096   blocks=0, rtextents=0
+
+[root@otuslinux ~]# mount /dev/md1 /mnt/
+
+[root@otuslinux ~]# rsync -auxHAXSv --exclude=/dev/* --exclude=/proc/* --exclude=/sys/* --exclude=/tmp /* --exclude=/mnt/* /* /mnt
+sending incremental file list
+bin -> usr/bin
+lib -> usr/lib
+lib64 -> usr/lib64
+sbin -> usr/sbin
+swapfile
+boot/
+
+##
+##  Удалил ненужный вывод 
+##
+
+sent 2,971,979,648 bytes  received 814,964 bytes  86,167,959.77 bytes/sec
+total size is 2,980,910,440  speedup is 1.00
+rsync error: some files/attrs were not transferred (see previous errors) (code 23) at main.c(1178) [sender=3.1.2]
+
+[root@otuslinux ~]# ll /mnt/
+total 24
+lrwxrwxrwx.  1 root    root             7 Jun  1  2019 bin -> usr/bin
+dr-xr-xr-x.  4 root    root          4096 Jun  1  2019 boot
+drwxr-xr-x.  2 root    root             6 Feb 27 07:03 dev
+drwxr-xr-x. 80 root    root          8192 Feb 27 06:42 etc
+drwxr-xr-x.  3 root    root            21 Jun  1  2019 home
+lrwxrwxrwx.  1 root    root             7 Jun  1  2019 lib -> usr/lib
+lrwxrwxrwx.  1 root    root             9 Jun  1  2019 lib64 -> usr/lib64
+drwxr-xr-x.  2 root    root             6 Apr 11  2018 media
+drwxr-xr-x.  2 root    root             6 Feb 27 07:07 mnt
+drwxr-xr-x.  2 root    root             6 Apr 11  2018 opt
+dr-xr-xr-x.  2 root    root             6 Feb 27 06:41 proc
+dr-xr-x---.  3 root    root           149 Feb 27 06:41 root
+drwxr-xr-x. 26 root    root          4096 Feb 27 07:04 run
+lrwxrwxrwx.  1 root    root             8 Jun  1  2019 sbin -> usr/sbin
+drwxr-xr-x.  2 root    root             6 Apr 11  2018 srv
+-rw-------.  1 root    root    2147483648 Jun  1  2019 swapfile
+dr-xr-xr-x.  2 root    root             6 Feb 27 06:41 sys
+drwxrwxrwt.  2 root    root             6 Feb 27 07:07 tmp
+drwxr-xr-x. 13 root    root           155 Jun  1  2019 usr
+drwxrwxr-x.  2 vagrant vagrant         45 Feb 27 06:39 vagrant
+drwxr-xr-x. 18 root    root           254 Feb 27 06:41 var
+
+[root@otuslinux ~]# cd /mnt/
+[root@otuslinux mnt]# ll
+total 24
+lrwxrwxrwx.  1 root    root             7 Jun  1  2019 bin -> usr/bin
+dr-xr-xr-x.  4 root    root          4096 Jun  1  2019 boot
+drwxr-xr-x.  2 root    root             6 Feb 27 07:03 dev
+drwxr-xr-x. 80 root    root          8192 Feb 27 06:42 etc
+drwxr-xr-x.  3 root    root            21 Jun  1  2019 home
+lrwxrwxrwx.  1 root    root             7 Jun  1  2019 lib -> usr/lib
+lrwxrwxrwx.  1 root    root             9 Jun  1  2019 lib64 -> usr/lib64
+drwxr-xr-x.  2 root    root             6 Apr 11  2018 media
+drwxr-xr-x.  2 root    root             6 Feb 27 07:07 mnt
+drwxr-xr-x.  2 root    root             6 Apr 11  2018 opt
+dr-xr-xr-x.  2 root    root             6 Feb 27 06:41 proc
+dr-xr-x---.  3 root    root           149 Feb 27 06:41 root
+drwxr-xr-x. 26 root    root          4096 Feb 27 07:04 run
+lrwxrwxrwx.  1 root    root             8 Jun  1  2019 sbin -> usr/sbin
+drwxr-xr-x.  2 root    root             6 Apr 11  2018 srv
+-rw-------.  1 root    root    2147483648 Jun  1  2019 swapfile
+dr-xr-xr-x.  2 root    root             6 Feb 27 06:41 sys
+drwxrwxrwt.  2 root    root             6 Feb 27 07:07 tmp
+drwxr-xr-x. 13 root    root           155 Jun  1  2019 usr
+drwxrwxr-x.  2 vagrant vagrant         45 Feb 27 06:39 vagrant
+drwxr-xr-x. 18 root    root           254 Feb 27 06:41 var
+
+[root@otuslinux mnt]# ll /mnt/boot/
+total 23456
+-rw-r--r--. 1 root root   151923 May 14  2019 config-3.10.0-957.12.2.el7.x86_64
+drwxr-xr-x. 3 root root       17 Jun  1  2019 efi
+drwx------. 5 root root       97 Jun  1  2019 grub2
+-rw-------. 1 root root 13350422 Jun  1  2019 initramfs-3.10.0-957.12.2.el7.x86_64.img
+-rw-r--r--. 1 root root   314126 May 14  2019 symvers-3.10.0-957.12.2.el7.x86_64.gz
+-rw-------. 1 root root  3545659 May 14  2019 System.map-3.10.0-957.12.2.el7.x86_64
+-rwxr-xr-x. 1 root root  6643904 May 14  2019 vmlinuz-3.10.0-957.12.2.el7.x86_64
+
+[root@otuslinux mnt]# mount --bind /proc /mnt/proc
+[root@otuslinux mnt]# mount --bind /dev /mnt/dev
+[root@otuslinux mnt]# mount --bind /sys /mnt/sys
+[root@otuslinux mnt]# mount --bind /run /mnt/run
+
+[root@otuslinux mnt]# chroot /mnt/
+
+[root@otuslinux /]# blkid /dev/md*
+/dev/md1: UUID="32330341-63c0-4e3f-b7b5-f9f2cc702d36" TYPE="xfs" 
+[root@otuslinux /]# vim /etc/fstab 
+bash: vim: command not found
+
+[root@otuslinux /]# vi /etc/fstab 
+#
+# /etc/fstab
+# Created by anaconda on Sat Jun  1 17:13:31 2019
+#
+# Accessible filesystems, by reference, are maintained under '/dev/disk'
+# See man pages fstab(5), findfs(8), mount(8) and/or blkid(8) for more info
+#
+№UUID=8ac075e3-1124-4bb6-bef7-a6811bf8b870 /	xfs     defaults	0 0
+UUID=32330341-63c0-4e3f-b7b5-f9f2cc702d36 /	xfs     defaults	0 0
+/swapfile none swap defaults 0 0
+
+
+[root@otuslinux /]# mdadm --detail --scan > /etc/mdadm.conf
+
+[root@otuslinux /]# cp /boot/initramfs-$(uname -r).img /boot/initramfs-$(uname -r).img.bck
+
+[root@otuslinux /]# dracut --mdadmconf --add="mdraid" --force -v
+Executing: /sbin/dracut --mdadmconf --add=mdraid --force -v
+dracut module 'busybox' will not be installed, because command 'busybox' could not be found!
+dracut module 'plymouth' will not be installed, because command 'plymouthd' could not be found!
+dracut module 'plymouth' will not be installed, because command 'plymouth' could not be found!
+dracut module 'crypt' will not be installed, because command 'cryptsetup' could not be found!
+dracut module 'dmraid' will not be installed, because command 'dmraid' could not be found!
+dracut module 'dmsquash-live-ntfs' will not be installed, because command 'ntfs-3g' could not be found!
+dracut module 'lvm' will not be installed, because command 'lvm' could not be found!
+dracut module 'multipath' will not be installed, because command 'multipath' could not be found!
+dracut module 'busybox' will not be installed, because command 'busybox' could not be found!
+dracut module 'crypt' will not be installed, because command 'cryptsetup' could not be found!
+dracut module 'dmraid' will not be installed, because command 'dmraid' could not be found!
+dracut module 'dmsquash-live-ntfs' will not be installed, because command 'ntfs-3g' could not be found!
+dracut module 'lvm' will not be installed, because command 'lvm' could not be found!
+dracut module 'multipath' will not be installed, because command 'multipath' could not be found!
+*** Including module: bash ***
+*** Including module: nss-softokn ***
+*** Including module: i18n ***
+*** Including module: kernel-modules ***
+Omitting driver floppy
+*** Including module: mdraid ***
+Skipping udev rule: 64-md-raid.rules
+*** Including module: qemu ***
+*** Including module: rootfs-block ***
+*** Including module: terminfo ***
+*** Including module: udev-rules ***
+Skipping udev rule: 40-redhat-cpu-hotplug.rules
+Skipping udev rule: 91-permissions.rules
+*** Including module: biosdevname ***
+*** Including module: systemd ***
+*** Including module: usrmount ***
+*** Including module: base ***
+*** Including module: fs-lib ***
+*** Including module: shutdown ***
+*** Including modules done ***
+*** Installing kernel module dependencies and firmware ***
+*** Installing kernel module dependencies and firmware done ***
+*** Resolving executable dependencies ***
+*** Resolving executable dependencies done***
+*** Hardlinking files ***
+*** Hardlinking files done ***
+*** Stripping files ***
+*** Stripping files done ***
+*** Generating early-microcode cpio image contents ***
+*** No early-microcode cpio image needed ***
+*** Store current command line parameters ***
+*** Creating image file ***
+*** Creating image file done ***
+*** Creating initramfs image file '/boot/initramfs-3.10.0-957.12.2.el7.x86_64.img' done ***
+
+[root@otuslinux /]# ll /
+total 20
+lrwxrwxrwx.   1 root    root             7 Jun  1  2019 bin -> usr/bin
+dr-xr-xr-x.   4 root    root          4096 Feb 27 07:16 boot
+drwxr-xr-x.  17 root    root          2940 Feb 27 07:03 dev
+drwxr-xr-x.  80 root    root          8192 Feb 27 07:14 etc
+drwxr-xr-x.   3 root    root            21 Jun  1  2019 home
+lrwxrwxrwx.   1 root    root             7 Jun  1  2019 lib -> usr/lib
+lrwxrwxrwx.   1 root    root             9 Jun  1  2019 lib64 -> usr/lib64
+drwxr-xr-x.   2 root    root             6 Apr 11  2018 media
+drwxr-xr-x.   2 root    root             6 Feb 27 07:07 mnt
+drwxr-xr-x.   2 root    root             6 Apr 11  2018 opt
+dr-xr-xr-x. 174 root    root             0 Feb 27 06:41 proc
+dr-xr-x---.   3 root    root           149 Feb 27 06:41 root
+drwxr-xr-x.  26 root    root           800 Feb 27 07:04 run
+lrwxrwxrwx.   1 root    root             8 Jun  1  2019 sbin -> usr/sbin
+drwxr-xr-x.   2 root    root             6 Apr 11  2018 srv
+-rw-------.   1 root    root    2147483648 Jun  1  2019 swapfile
+dr-xr-xr-x.  13 root    root             0 Feb 27 06:41 sys
+drwxrwxrwt.   2 root    root             6 Feb 27 07:14 tmp
+drwxr-xr-x.  13 root    root           155 Jun  1  2019 usr
+drwxrwxr-x.   2 vagrant vagrant         45 Feb 27 06:39 vagrant
+drwxr-xr-x.  18 root    root           254 Feb 27 06:41 var
+[root@otuslinux /]# ll /mnt/
+total 0
+
+[root@otuslinux /]# vi /etc/default/grub 
+
+GRUB_TIMEOUT=1
+GRUB_DISTRIBUTOR="$(sed 's, release .*$,,g' /etc/system-release)"
+GRUB_DEFAULT=saved
+GRUB_DISABLE_SUBMENU=true
+GRUB_TERMINAL_OUTPUT="console"
+GRUB_CMDLINE_LINUX="no_timer_check console=tty0 console=ttyS0,115200n8 net.ifnames=0 biosdevname=0 elevator=noop crashkernel=auto rd.auto rd.auto=1 rhgb quiet"
+GRUB_DISABLE_RECOVERY="true"
+GRUB_PRELOAD_MODULES="mdraid1x"
+
+/etc/default/grub" 8L, 378C written
+
+[root@otuslinux /]# grub2-mkconfig -o /boot/grub2/grub.cfg 
+Generating grub configuration file ...
+/usr/sbin/grub2-probe: warning: Couldn't find physical volume `(null)'. Some modules may be missing from core image..
+Found linux image: /boot/vmlinuz-3.10.0-957.12.2.el7.x86_64
+Found initrd image: /boot/initramfs-3.10.0-957.12.2.el7.x86_64.img
+/usr/sbin/grub2-probe: warning: Couldn't find physical volume `(null)'. Some modules may be missing from core image..
+/usr/sbin/grub2-probe: warning: Couldn't find physical volume `(null)'. Some modules may be missing from core image..
+/usr/sbin/grub2-probe: warning: Couldn't find physical volume `(null)'. Some modules may be missing from core image..
+/usr/sbin/grub2-probe: warning: Couldn't find physical volume `(null)'. Some modules may be missing from core image..
+done
+
+[root@otuslinux /]# grub2-install /dev/sdb
+Installing for i386-pc platform.
+grub2-install: warning: Couldn't find physical volume `(null)'. Some modules may be missing from core image..
+grub2-install: warning: Couldn't find physical volume `(null)'. Some modules may be missing from core image..
+Installation finished. No error reported.
+
+#Вышел из chroot
+[root@otuslinux /]# exit
+exit
+
+[root@otuslinux mnt]# ll /mnt/
+total 20
+lrwxrwxrwx.   1 root    root             7 Jun  1  2019 bin -> usr/bin
+dr-xr-xr-x.   4 root    root          4096 Feb 27 07:16 boot
+drwxr-xr-x.  17 root    root          2940 Feb 27 07:03 dev
+drwxr-xr-x.  80 root    root          8192 Feb 27 07:14 etc
+drwxr-xr-x.   3 root    root            21 Jun  1  2019 home
+lrwxrwxrwx.   1 root    root             7 Jun  1  2019 lib -> usr/lib
+lrwxrwxrwx.   1 root    root             9 Jun  1  2019 lib64 -> usr/lib64
+drwxr-xr-x.   2 root    root             6 Apr 11  2018 media
+drwxr-xr-x.   2 root    root             6 Feb 27 07:07 mnt
+drwxr-xr-x.   2 root    root             6 Apr 11  2018 opt
+dr-xr-xr-x. 174 root    root             0 Feb 27 06:41 proc
+dr-xr-x---.   3 root    root           170 Feb 27 07:21 root
+drwxr-xr-x.  26 root    root           800 Feb 27 07:04 run
+lrwxrwxrwx.   1 root    root             8 Jun  1  2019 sbin -> usr/sbin
+drwxr-xr-x.   2 root    root             6 Apr 11  2018 srv
+-rw-------.   1 root    root    2147483648 Jun  1  2019 swapfile
+dr-xr-xr-x.  13 root    root             0 Feb 27 06:41 sys
+drwxrwxrwt.   2 root    root             6 Feb 27 07:20 tmp
+drwxr-xr-x.  13 root    root           155 Jun  1  2019 usr
+drwxrwxr-x.   2 vagrant vagrant         45 Feb 27 06:39 vagrant
+drwxr-xr-x.  18 root    root           254 Feb 27 06:41 var
+
+[root@otuslinux mnt]# cat /etc/fstab 
+
+#
+# /etc/fstab
+# Created by anaconda on Sat Jun  1 17:13:31 2019
+#
+# Accessible filesystems, by reference, are maintained under '/dev/disk'
+# See man pages fstab(5), findfs(8), mount(8) and/or blkid(8) for more info
+#
+UUID=8ac075e3-1124-4bb6-bef7-a6811bf8b870 /                       xfs     defaults        0 0
+/swapfile none swap defaults 0 0
+[root@otuslinux mnt]# cat /mnt/etc/fstab 
+
+#
+# /etc/fstab
+# Created by anaconda on Sat Jun  1 17:13:31 2019
+#
+# Accessible filesystems, by reference, are maintained under '/dev/disk'
+# See man pages fstab(5), findfs(8), mount(8) and/or blkid(8) for more info
+#
+#UUID=8ac075e3-1124-4bb6-bef7-a6811bf8b870 /                       xfs     defaults        0 0
+UUID=32330341-63c0-4e3f-b7b5-f9f2cc702d36 /                       xfs     defaults        0 0
+/swapfile none swap defaults 0 0
+
+[root@otuslinux mnt]# poweroff
+Connection to 127.0.0.1 closed by remote host.
+Connection to 127.0.0.1 closed.
+
+alexandr.kazakov@node03-ml$ vagrant ssh
+Last login: Thu Feb 27 06:54:19 2020 from 10.0.2.2
+
+vagrant@otuslinux:~[vagrant@otuslinux ~]$ sudo -i
+
+root@otuslinux:~[root@otuslinux ~]# lsblk 
+NAME    MAJ:MIN RM SIZE RO TYPE  MOUNTPOINT
+sda       8:0    0  40G  0 disk  
+└─sda1    8:1    0  40G  0 part  
+sdb       8:16   0  40G  0 disk  
+└─sdb1    8:17   0  40G  0 part  
+  └─md1   9:1    0  40G  0 raid1 /
+
+[root@otuslinux ~]# cat /etc/fstab 
+
+#
+# /etc/fstab
+# Created by anaconda on Sat Jun  1 17:13:31 2019
+#
+# Accessible filesystems, by reference, are maintained under '/dev/disk'
+# See man pages fstab(5), findfs(8), mount(8) and/or blkid(8) for more info
+#
+#UUID=8ac075e3-1124-4bb6-bef7-a6811bf8b870 /                       xfs     defaults        0 0
+UUID=32330341-63c0-4e3f-b7b5-f9f2cc702d36 /                       xfs     defaults        0 0
+/swapfile none swap defaults 0 0
+
+[root@otuslinux ~]# mount -t xfs
+/dev/md1 on / type xfs (rw,relatime,seclabel,attr2,inode64,noquota)
+
+[root@otuslinux ~]# cat /proc/mdstat 
+Personalities : [raid1] 
+md1 : active raid1 sdb1[1]
+      41908224 blocks super 1.2 [2/1] [_U]
+      
+unused devices: <none>
+[root@otuslinux ~]# df -h
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/md1         40G  888M   40G   3% /
+devtmpfs        489M     0  489M   0% /dev
+tmpfs           496M     0  496M   0% /dev/shm
+tmpfs           496M  6.7M  489M   2% /run
+tmpfs           496M     0  496M   0% /sys/fs/cgroup
+tmpfs           100M     0  100M   0% /run/user/1000
+
+[root@otuslinux ~]# fdisk /dev/sda
+Welcome to fdisk (util-linux 2.23.2).
+
+Changes will remain in memory only, until you decide to write them.
+Be careful before using the write command.
+
+
+Command (m for help): m
+Command action
+   a   toggle a bootable flag
+   b   edit bsd disklabel
+   c   toggle the dos compatibility flag
+   d   delete a partition
+   g   create a new empty GPT partition table
+   G   create an IRIX (SGI) partition table
+   l   list known partition types
+   m   print this menu
+   n   add a new partition
+   o   create a new empty DOS partition table
+   p   print the partition table
+   q   quit without saving changes
+   s   create a new empty Sun disklabel
+   t   change a partition's system id
+   u   change display/entry units
+   v   verify the partition table
+   w   write table to disk and exit
+   x   extra functionality (experts only)
+
+
+Command (m for help): p
+
+Disk /dev/sda: 42.9 GB, 42949672960 bytes, 83886080 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk label type: dos
+Disk identifier: 0x0009ef88
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sda1   *        2048    83886079    41942016   83  Linux
+
+Command (m for help): t
+Selected partition 1
+Hex code (type L to list all codes): fd
+Changed type of partition 'Linux' to 'Linux raid autodetect'
+
+Command (m for help): p
+
+Disk /dev/sda: 42.9 GB, 42949672960 bytes, 83886080 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk label type: dos
+Disk identifier: 0x0009ef88
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sda1   *        2048    83886079    41942016   fd  Linux raid autodetect
+
+Command (m for help): w
+The partition table has been altered!
+
+Calling ioctl() to re-read partition table.
+Syncing disks.
+[root@otuslinux ~]# fdisk -l
+
+Disk /dev/sda: 42.9 GB, 42949672960 bytes, 83886080 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk label type: dos
+Disk identifier: 0x0009ef88
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sda1   *        2048    83886079    41942016   fd  Linux raid autodetect
+
+Disk /dev/sdb: 42.9 GB, 42949672960 bytes, 83886080 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk label type: dos
+Disk identifier: 0x00000000
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sdb1   *        2048    83886079    41942016   fd  Linux raid autodetect
+
+Disk /dev/md1: 42.9 GB, 42914021376 bytes, 83816448 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+
+[root@otuslinux ~]# mdadm --manage /dev/md1 --add /dev/sda1
+mdadm: added /dev/sda1
+
+[root@otuslinux ~]# cat /proc/mdstat 
+Personalities : [raid1] 
+md1 : active raid1 sda1[2] sdb1[1]
+      41908224 blocks super 1.2 [2/1] [_U]
+      [=>...................]  recovery =  6.0% (2551680/41908224) finish=3.0min speed=212640K/sec
+      
+unused devices: <none>
+
+[root@otuslinux ~]# cat /proc/mdstat 
+Personalities : [raid1] 
+md1 : active raid1 sda1[2] sdb1[1]
+      41908224 blocks super 1.2 [2/1] [_U]
+      [=>...................]  recovery =  7.1% (3000192/41908224) finish=3.0min speed=214299K/sec
+      
+unused devices: <none>
+
+[root@otuslinux ~]# cat /proc/mdstat 
+Personalities : [raid1] 
+md1 : active raid1 sda1[2] sdb1[1]
+      41908224 blocks super 1.2 [2/1] [_U]
+      [===================>.]  recovery = 95.0% (39820160/41908224) finish=0.1min speed=206064K/sec
+      
+unused devices: <none>
+
+[root@otuslinux ~]# cat /proc/mdstat 
+Personalities : [raid1] 
+md1 : active raid1 sda1[2] sdb1[1]
+      41908224 blocks super 1.2 [2/2] [UU]
+      
+unused devices: <none>
+
+[root@otuslinux ~]# grub2-install /dev/sda
+Installing for i386-pc platform.
+Installation finished. No error reported.
+
+[root@otuslinux ~]# poweroff 
+Connection to 127.0.0.1 closed by remote host.
+Connection to 127.0.0.1 closed.
+
+alexandr.kazakov@node03-ml$ vagrant ssh
+Last login: Thu Feb 27 07:24:08 2020 from 10.0.2.2
+
+[vagrant@otuslinux ~]$ cat /proc/mdstat 
+Personalities : [raid1] 
+md1 : active raid1 sdb1[1] sda1[2]
+      41908224 blocks super 1.2 [2/2] [UU]
+      
+unused devices: <none>
+
+[vagrant@otuslinux ~]$ df -h
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/md1         40G  887M   40G   3% /
+devtmpfs        489M     0  489M   0% /dev
+tmpfs           496M     0  496M   0% /dev/shm
+tmpfs           496M  6.7M  489M   2% /run
+tmpfs           496M     0  496M   0% /sys/fs/cgroup
+tmpfs           100M     0  100M   0% /run/user/1000
+
+[vagrant@otuslinux ~]$ logout
+Connection to 127.0.0.1 closed.
+
+alexandr.kazakov@node03-ml$ exit
+exit
+
+Script done on 2020-02-27 13:35:18+0600
